@@ -1,14 +1,17 @@
 mod access;
 
+use std::time::Instant;
 use clap::Parser;
 
 use kwik::{
 	fmt,
+	FileReader,
 	progress::{Progress, Tag},
+	binary_reader::{BinaryReader, SizedChunk},
 };
 
 use paper_client::PaperClient;
-use crate::access::Access;
+use crate::access::{Access, Command};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -19,14 +22,17 @@ struct Args {
 	#[arg(short, long, default_value_t = 3145)]
 	port: u32,
 
-	#[arg(short, long, default_value_t = 104857600)]
-	size: u64,
+	#[arg(short, long)]
+	trace_path: String,
+}
 
-	#[arg(short, long, default_value_t = 1_000_000)]
-	num_accesses: u64,
+#[derive(Default)]
+struct Stats {
+	num_gets: u64,
+	num_sets: u64,
 
-	#[arg(short, long, default_value_t = 3)]
-	data_size: u32,
+	total_get_time: u64,
+	total_set_time: u64,
 }
 
 fn main() {
@@ -37,52 +43,63 @@ fn main() {
 		return;
 	};
 
-	client.resize(args.size).unwrap();
+	client.wipe().unwrap();
 
-	let accesses = init_sets(&args);
+	let reader = BinaryReader::<Access>::new(&args.trace_path)
+		.expect("Invalid trace path.");
 
-	println!("Processing {} sets", fmt::number(args.num_accesses));
+	println!("Processing {} accesses", fmt::number(reader.size() / Access::size() as u64));
 
-	let mut progress = Progress::new(args.num_accesses, &[
+	let mut progress = Progress::new(reader.size(), &[
 		Tag::Tps,
 		Tag::Eta,
 		Tag::Time,
 	]);
 
-	for access in &accesses {
-		client.set(&access.key, &access.value, Some(5)).unwrap();
-		progress.tick(1);
+	let mut stats = Stats::default();
+
+	for access in reader {
+		match access.command {
+			Command::Get => {
+				let start_time = Instant::now();
+				client.get(&access.key).unwrap();
+				let elapsed_time = start_time.elapsed().as_micros() as u64;
+
+				stats.num_gets += 1;
+				stats.total_get_time += elapsed_time;
+			},
+
+			Command::Set => {
+				let start_time = Instant::now();
+				client.set(&access.key, &access.value, access.ttl).unwrap();
+				let elapsed_time = start_time.elapsed().as_micros() as u64;
+
+				stats.num_sets += 1;
+				stats.total_set_time += elapsed_time;
+			},
+		};
+
+		progress.tick(Access::size());
 	}
 
-	println!("\nProcessing {} gets", fmt::number(args.num_accesses));
+	let get_rate = stats.num_gets as f64 / (stats.total_get_time / 1_000_000) as f64;
+	let set_rate = stats.num_sets as f64 / (stats.total_set_time / 1_000_000) as f64;
 
-	let mut progress = Progress::new(args.num_accesses, &[
-		Tag::Tps,
-		Tag::Eta,
-		Tag::Time,
-	]);
+	println!();
+	println!("GET accesses/sec: {}", fmt::number(get_rate as u64));
+	println!("SET accesses/sec: {}", fmt::number(set_rate as u64));
 
-	for access in &accesses {
-		client.get(&access.key).unwrap();
-		progress.tick(1);
-	}
-}
+	println!();
 
-fn init_sets(args: &Args) -> Vec<Access> {
-	let mut accesses = Vec::<Access>::new();
+	println!(
+		"GET Time per access: {} ({}s)",
+		(stats.total_get_time as f64 / stats.num_gets as f64).round(),
+		std::char::from_u32(0x03bc).unwrap(),
+	);
 
-	for i in 0..args.num_accesses {
-		let value: String = std::iter::repeat('0')
-			.take(args.data_size as usize)
-			.collect();
-
-		let access = Access::new(
-			format!("{}", i),
-			value,
-		);
-
-		accesses.push(access);
-	}
-
-	accesses
+	println!(
+		"SET Time per access: {} ({}s)",
+		(stats.total_set_time as f64 / stats.num_sets as f64).round(),
+		std::char::from_u32(0x03bc).unwrap(),
+	);
 }
