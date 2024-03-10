@@ -1,7 +1,10 @@
 mod access;
+mod client;
+mod stats;
 
-use std::time::Instant;
+use std::sync::Arc;
 use clap::Parser;
+use crossbeam_channel::unbounded;
 
 use kwik::{
 	fmt,
@@ -10,45 +13,59 @@ use kwik::{
 	binary_reader::{BinaryReader, SizedChunk},
 };
 
-use paper_client::PaperClient;
-use crate::access::{Access, Command};
+use crate::{
+	client::BenchmarkClient,
+	access::Access,
+	stats::Stats,
+};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-	#[arg(short, long, default_value = "127.0.0.1")]
+	#[arg(long, default_value = "127.0.0.1")]
 	host: String,
 
-	#[arg(short, long, default_value_t = 3145)]
+	#[arg(long, default_value_t = 3145)]
 	port: u32,
 
 	#[arg(short, long)]
 	trace_path: String,
+
+	#[arg(short, long, default_value_t = 2)]
+	clients: u32,
 }
 
-#[derive(Default)]
-struct Stats {
-	num_gets: u64,
-	num_sets: u64,
-
-	total_get_time: u64,
-	total_set_time: u64,
-}
-
-fn main() {
+#[tokio::main]
+async fn main() {
 	let args = Args::parse();
 
-	let Ok(mut client) = PaperClient::new(&args.host, args.port) else {
-		println!("Could not connect to host.");
-		return;
-	};
+	assert!(args.clients > 0);
 
-	client.wipe().unwrap();
+	let mut tasks = Vec::new();
+	let host = Arc::new(args.host);
+
+	let (sender, receiver) = unbounded::<Access>();
+
+	println!("Initializing {} client(s)...", args.clients);
+
+	for _ in 0..args.clients {
+		let host = host.clone();
+		let receiver = receiver.clone();
+
+		let task = tokio::spawn(async move {
+			let mut client = BenchmarkClient::new(&host, args.port, receiver)
+				.expect("Could not create client.");
+
+			client.run()
+		});
+
+		tasks.push(task);
+	}
 
 	let reader = BinaryReader::<Access>::new(&args.trace_path)
 		.expect("Invalid trace path.");
 
-	println!("Processing {} accesses", fmt::number(reader.size() / Access::size() as u64));
+	println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::size() as u64));
 
 	let mut progress = Progress::new(reader.size(), &[
 		Tag::Tps,
@@ -56,30 +73,23 @@ fn main() {
 		Tag::Time,
 	]);
 
+	for access in reader {
+		sender.send(access).expect("Could not send access to client.");
+		progress.tick(Access::size());
+	}
+
+	drop(sender);
+
+	println!();
+
 	let mut stats = Stats::default();
 
-	for access in reader {
-		match access.command {
-			Command::Get => {
-				let start_time = Instant::now();
-				client.get(&access.key).unwrap();
-				let elapsed_time = start_time.elapsed().as_micros() as u64;
+	for (i, task) in tasks.into_iter().enumerate() {
+		println!("Processing stats of client {}...", i + 1);
 
-				stats.num_gets += 1;
-				stats.total_get_time += elapsed_time;
-			},
-
-			Command::Set => {
-				let start_time = Instant::now();
-				client.set(&access.key, &access.value, access.ttl).unwrap();
-				let elapsed_time = start_time.elapsed().as_micros() as u64;
-
-				stats.num_sets += 1;
-				stats.total_set_time += elapsed_time;
-			},
-		};
-
-		progress.tick(Access::size());
+		stats += task.await
+			.expect("Could not terminate client")
+			.expect("Error executing client requests");
 	}
 
 	let get_rate = stats.num_gets as f64 / (stats.total_get_time / 1_000_000) as f64;
