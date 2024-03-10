@@ -16,7 +16,7 @@ pub struct Access {
 	pub command: Command,
 
 	pub key: String,
-	pub value: String,
+	pub value: Box<[u8]>,
 
 	pub ttl: Option<u32>,
 }
@@ -55,7 +55,7 @@ impl ReadChunk for Access {
 		};
 
 		let value = match rdr.read_u32::<LittleEndian>() {
-			Ok(size) => "0".repeat(size as usize),
+			Ok(size) => [0u8].repeat(size as usize).into(),
 
 			Err(_) => return Err(Error::new(
 				ErrorKind::InvalidData,
