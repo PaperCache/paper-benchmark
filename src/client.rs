@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use crossbeam_channel::Receiver;
 use paper_client::{PaperClient, PaperClientError};
 
@@ -34,7 +34,9 @@ impl BenchmarkClient {
 	}
 
 	pub fn run(&mut self) -> Result<Stats, PaperClientError> {
-		while let Ok(access) = self.accesses.recv() {
+		let max_wait = Duration::from_secs(5);
+
+		while let Ok(access) = self.accesses.recv_timeout(max_wait) {
 			match access.command {
 				Command::Get => {
 					let start_time = Instant::now();
