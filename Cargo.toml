@@ -1,11 +1,11 @@
 [package]
 name = "paper-benchmark"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2021"
 
 [dependencies]
-paper_client = { git = "ssh://git@github.com/Paper-Book/paper-client-rs.git", version = "2.0.4" }
-kwik = { git = "https://github.com/KiaShakiba/kwik-rs.git", version = "0.1.0" }
+paper_client = { git = "ssh://git@github.com/Paper-Book/paper-client-rs.git", version = "2.0.5" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.0.0" }
 clap = { version = "4.4.7", features = ["derive"] }
 byteorder = "1.5.0"
 crossbeam-channel = "0.5.12"

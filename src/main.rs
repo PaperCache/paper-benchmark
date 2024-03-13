@@ -31,7 +31,7 @@ struct Args {
 	#[arg(short, long)]
 	trace_path: String,
 
-	#[arg(short, long, default_value_t = 2)]
+	#[arg(short, long, default_value_t = 4)]
 	clients: u32,
 }
 

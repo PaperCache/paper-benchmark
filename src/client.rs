@@ -41,7 +41,11 @@ impl BenchmarkClient {
 				Command::Get => {
 					let start_time = Instant::now();
 
-					self.client.get(&access.key)?;
+					if let Err(err) = self.client.get(&access.key) {
+						if !matches!(err, PaperClientError::CacheError(_)) {
+							return Err(err);
+						}
+					}
 
 					self.stats.total_get_time += start_time
 						.elapsed()
@@ -53,7 +57,11 @@ impl BenchmarkClient {
 				Command::Set => {
 					let start_time = Instant::now();
 
-					self.client.set(&access.key, &access.value, access.ttl)?;
+					if let Err(err) = self.client.set(&access.key, &access.value, access.ttl) {
+						if !matches!(err, PaperClientError::CacheError(_)) {
+							return Err(err);
+						}
+					}
 
 					self.stats.total_set_time += start_time
 						.elapsed()
