@@ -43,26 +43,28 @@ async fn main() {
 
 	assert!(args.clients > 0);
 
-	let mut tasks = Vec::new();
 	let host = Arc::new(args.host);
 
 	let (sender, receiver) = unbounded::<ClientEvent>();
 
 	println!("Initializing {} client(s)...", args.clients);
 
-	for _ in 0..args.clients {
-		let host = host.clone();
-		let receiver = receiver.clone();
+	let clients = (0..args.clients)
+		.map(|_| {
+			let host = host.clone();
+			let receiver = receiver.clone();
 
-		let task = tokio::spawn(async move {
-			let mut client = BenchmarkClient::new(&host, args.port, receiver)
-				.expect("Could not create client.");
+			BenchmarkClient::new(&host, args.port, receiver)
+				.expect("Could not create client.")
+		})
+		.collect::<Vec<BenchmarkClient>>();
 
+	let tasks = clients
+		.into_iter()
+		.map(|mut client| tokio::spawn(async move {
 			client.run()
-		});
-
-		tasks.push(task);
-	}
+		}))
+		.collect::<Vec<_>>();
 
 	println!("\nPerforming {} pings...", fmt::number(PING_TEST_COUNT));
 
@@ -105,24 +107,9 @@ async fn main() {
 			.expect("Error executing client requests");
 	}
 
-	println!();
-	println!("Total PINGs:\t{}", fmt::number(stats.num_pings));
-	println!("Total GETs:\t{}", fmt::number(stats.num_gets));
-	println!("Total SETs:\t{}", fmt::number(stats.num_sets));
-
-	println!();
-	print_avg_size("GET", stats.num_gets, stats.total_get_size);
-	print_avg_size("SET", stats.num_sets, stats.total_set_size);
-
-	println!();
-	print_stat_rate("PING", stats.num_pings, stats.total_ping_time);
-	print_stat_rate("GET", stats.num_gets, stats.total_get_time);
-	print_stat_rate("SET", stats.num_sets, stats.total_set_time);
-
-	println!();
-	print_stat_time("PING", stats.num_pings, stats.total_ping_time);
-	print_stat_time("GET", stats.num_gets, stats.total_get_time);
-	print_stat_time("SET", stats.num_sets, stats.total_set_time);
+	stats.print_ping_stats();
+	stats.print_get_stats();
+	stats.print_set_stats();
 }
 
 fn print_avg_size(label: &str, num: u64, total_size: u64) {

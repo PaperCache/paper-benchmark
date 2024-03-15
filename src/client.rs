@@ -54,14 +54,8 @@ impl BenchmarkClient {
 
 	fn handle_ping(&mut self) -> Result<(), PaperClientError> {
 		let start_time = Instant::now();
-
 		self.client.ping()?;
-
-		self.stats.total_ping_time += start_time
-			.elapsed()
-			.as_micros() as u64;
-
-		self.stats.num_pings += 1;
+		self.stats.ping(start_time.elapsed());
 
 		Ok(())
 	}
@@ -76,14 +70,10 @@ impl BenchmarkClient {
 						return Err(err);
 					}
 				} else {
-					self.stats.total_get_size += access.value.len() as u64;
+					//self.stats.total_get_size += access.value.len() as u64;
 				}
 
-				self.stats.total_get_time += start_time
-					.elapsed()
-					.as_micros() as u64;
-
-				self.stats.num_gets += 1;
+				self.stats.get(start_time.elapsed());
 			},
 
 			Command::Set => {
@@ -94,14 +84,10 @@ impl BenchmarkClient {
 						return Err(err);
 					}
 				} else {
-					self.stats.total_set_size += access.value.len() as u64;
+					//self.stats.total_set_size += access.value.len() as u64;
 				}
 
-				self.stats.total_set_time += start_time
-					.elapsed()
-					.as_micros() as u64;
-
-				self.stats.num_sets += 1;
+				self.stats.set(start_time.elapsed());
 			},
 		}
 
