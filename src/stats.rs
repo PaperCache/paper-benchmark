@@ -46,6 +46,12 @@ impl Stats {
 
 		println!("\nPING stats");
 		print_times(&self.ping_times, total_pings);
+
+		println!(
+			"Avg latency:\t{} ({}s)",
+			(self.ping_total_time as f64 / total_pings as f64).round(),
+			std::char::from_u32(0x03bc).unwrap(),
+		);
 	}
 
 	pub fn print_get_stats(&self) {
@@ -57,6 +63,12 @@ impl Stats {
 
 		println!("\nGET stats");
 		print_times(&self.get_times, total_gets);
+
+		println!(
+			"Avg latency:\t{} ({}s)",
+			(self.get_total_time as f64 / total_gets as f64).round(),
+			std::char::from_u32(0x03bc).unwrap(),
+		);
 	}
 
 	pub fn print_set_stats(&self) {
@@ -68,6 +80,12 @@ impl Stats {
 
 		println!("\nSET stats");
 		print_times(&self.set_times, total_sets);
+
+		println!(
+			"Avg latency:\t{} ({}s)",
+			(self.set_total_time as f64 / total_sets as f64).round(),
+			std::char::from_u32(0x03bc).unwrap(),
+		);
 	}
 }
 
@@ -142,5 +160,5 @@ fn record_time(times: &mut BTreeMap<u64, u64>, time: u64) {
 }
 
 fn get_rounded_time(time: u64) -> u64 {
-	(time / 10) * 10
+	(time as f64 / 10.0).round() as u64 * 10
 }

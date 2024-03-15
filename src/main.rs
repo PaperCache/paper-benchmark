@@ -4,7 +4,7 @@ mod stats;
 
 use std::sync::Arc;
 use clap::Parser;
-use crossbeam_channel::unbounded;
+use crossbeam_channel::bounded;
 
 use kwik::{
 	fmt,
@@ -45,7 +45,7 @@ async fn main() {
 
 	let host = Arc::new(args.host);
 
-	let (sender, receiver) = unbounded::<ClientEvent>();
+	let (sender, receiver) = bounded::<ClientEvent>(args.clients as usize);
 
 	println!("Initializing {} client(s)...", args.clients);
 
@@ -68,9 +68,17 @@ async fn main() {
 
 	println!("\nPerforming {} pings...", fmt::number(PING_TEST_COUNT));
 
+	let mut progress = Progress::new(PING_TEST_COUNT, &[
+		Tag::Tps,
+		Tag::Eta,
+		Tag::Time,
+	]);
+
 	for _ in 0..PING_TEST_COUNT {
 		sender.send(ClientEvent::Ping)
 			.expect("Could not send ping to client.");
+
+		progress.tick(1);
 	}
 
 	if let Some(trace_path) = &args.trace_path {
@@ -95,11 +103,7 @@ async fn main() {
 
 	drop(sender);
 
-	println!();
-
 	let mut stats = Stats::default();
-
-	println!("Waiting for clients to handle events...");
 
 	for task in tasks {
 		stats += task.await
