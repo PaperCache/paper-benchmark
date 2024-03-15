@@ -4,6 +4,8 @@ use std::{
 	collections::BTreeMap,
 };
 
+use kwik::fmt;
+
 #[derive(Debug, Default, Clone)]
 pub struct Stats {
 	ping_times: BTreeMap<u64, u64>,
@@ -13,6 +15,9 @@ pub struct Stats {
 	ping_total_time: u64,
 	get_total_time: u64,
 	set_total_time: u64,
+
+	get_total_size: u64,
+	set_total_size: u64,
 }
 
 impl Stats {
@@ -23,18 +28,24 @@ impl Stats {
 		record_time(&mut self.ping_times, time);
 	}
 
-	pub fn get(&mut self, duration: Duration) {
+	pub fn store_get_time(&mut self, duration: Duration) {
 		let time = duration.as_micros() as u64;
-
 		self.get_total_time += time;
 		record_time(&mut self.get_times, time);
 	}
 
-	pub fn set(&mut self, duration: Duration) {
-		let time = duration.as_micros() as u64;
+	pub fn store_get_size(&mut self, size: u64) {
+		self.get_total_size += size;
+	}
 
+	pub fn store_set_time(&mut self, duration: Duration) {
+		let time = duration.as_micros() as u64;
 		self.set_total_time += time;
 		record_time(&mut self.set_times, time);
+	}
+
+	pub fn store_set_size(&mut self, size: u64) {
+		self.set_total_size += size;
 	}
 
 	pub fn print_ping_stats(&self) {
@@ -44,14 +55,17 @@ impl Stats {
 			return;
 		}
 
-		println!("\nPING stats");
+		println!("\n*** PING stats ***\n");
 		print_times(&self.ping_times, total_pings);
 
 		println!(
-			"Avg latency:\t{} ({}s)",
+			"\nAvg latency:\t{} ({}s)",
 			(self.ping_total_time as f64 / total_pings as f64).round(),
 			std::char::from_u32(0x03bc).unwrap(),
 		);
+
+		let ping_rate = total_pings as f64 / (self.ping_total_time / 1_000_000) as f64;
+		println!("PINGs/sec:\t{}", fmt::number(ping_rate as u64));
 	}
 
 	pub fn print_get_stats(&self) {
@@ -61,13 +75,23 @@ impl Stats {
 			return;
 		}
 
-		println!("\nGET stats");
+		println!("\n*** GET stats ***\n");
 		print_times(&self.get_times, total_gets);
 
 		println!(
-			"Avg latency:\t{} ({}s)",
+			"\nAvg latency:\t{} ({}s)",
 			(self.get_total_time as f64 / total_gets as f64).round(),
 			std::char::from_u32(0x03bc).unwrap(),
+		);
+
+		let get_rate = total_gets as f64 / (self.get_total_time / 1_000_000) as f64;
+		println!("GETs/sec:\t{}", fmt::number(get_rate as u64));
+
+		let avg_size = (self.get_total_size as f64 / total_gets as f64) as u64;
+		println!(
+			"Avg GET size:\t{} ({} B)",
+			fmt::memory(avg_size, Some(2)),
+			avg_size,
 		);
 	}
 
@@ -78,13 +102,23 @@ impl Stats {
 			return;
 		}
 
-		println!("\nSET stats");
+		println!("\n*** SET stats ***\n");
 		print_times(&self.set_times, total_sets);
 
 		println!(
-			"Avg latency:\t{} ({}s)",
+			"\nAvg latency:\t{} ({}s)",
 			(self.set_total_time as f64 / total_sets as f64).round(),
 			std::char::from_u32(0x03bc).unwrap(),
+		);
+
+		let set_rate = total_sets as f64 / (self.set_total_time / 1_000_000) as f64;
+		println!("SETs/sec:\t{}", fmt::number(set_rate as u64));
+
+		let avg_size = (self.set_total_size as f64 / total_sets as f64) as u64;
+		println!(
+			"Avg SET size:\t{} ({} B)",
+			fmt::memory(avg_size, Some(2)),
+			avg_size,
 		);
 	}
 }
@@ -94,16 +128,21 @@ impl AddAssign for Stats {
 		*self = Stats {
 			ping_times: merge_times(&self.ping_times, &rhs.ping_times),
 			get_times: merge_times(&self.get_times, &rhs.get_times),
-			set_times: merge_times(&self.get_times, &rhs.get_times),
+			set_times: merge_times(&self.set_times, &rhs.set_times),
 
 			ping_total_time: self.ping_total_time + rhs.ping_total_time,
 			get_total_time: self.get_total_time + rhs.get_total_time,
 			set_total_time: self.set_total_time + rhs.set_total_time,
+
+			get_total_size: self.get_total_size + rhs.get_total_size,
+			set_total_size: self.set_total_size + rhs.set_total_size,
 		}
 	}
 }
 
 fn print_times(times: &BTreeMap<u64, u64>, total_count: u64) {
+	println!("Latency distribution:");
+
 	let mut count_sum = 0;
 
 	for (time, count) in times.iter() {
@@ -140,9 +179,17 @@ fn merge_times(
 	times_b: &BTreeMap<u64, u64>,
 ) -> BTreeMap<u64, u64> {
 	let mut map = BTreeMap::<u64, u64>::new();
-
 	map.extend(times_a);
-	map.extend(times_b);
+
+	for (time_b, count_b) in times_b {
+		match map.get_mut(time_b) {
+			Some(count) => *count += count_b,
+
+			None => {
+				map.insert(*time_b, *count_b);
+			},
+		}
+	}
 
 	map
 }

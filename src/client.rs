@@ -70,24 +70,19 @@ impl BenchmarkClient {
 						return Err(err);
 					}
 				} else {
-					//self.stats.total_get_size += access.value.len() as u64;
+					self.stats.store_get_size(access.value.len() as u64);
 				}
 
-				self.stats.get(start_time.elapsed());
+				self.stats.store_get_time(start_time.elapsed());
 			},
 
 			Command::Set => {
 				let start_time = Instant::now();
 
-				if let Err(err) = self.client.set(&access.key, &access.value, access.ttl) {
-					if !matches!(err, PaperClientError::CacheError(_)) {
-						return Err(err);
-					}
-				} else {
-					//self.stats.total_set_size += access.value.len() as u64;
-				}
+				self.client.set(&access.key, &access.value, access.ttl)?;
 
-				self.stats.set(start_time.elapsed());
+				self.stats.store_set_time(start_time.elapsed());
+				self.stats.store_set_size(access.value.len() as u64);
 			},
 		}
 

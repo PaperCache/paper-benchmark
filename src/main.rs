@@ -47,7 +47,7 @@ async fn main() {
 
 	let (sender, receiver) = bounded::<ClientEvent>(args.clients as usize);
 
-	println!("Initializing {} client(s)...", args.clients);
+	println!("Initializing {} client(s)", args.clients);
 
 	let clients = (0..args.clients)
 		.map(|_| {
@@ -66,7 +66,7 @@ async fn main() {
 		}))
 		.collect::<Vec<_>>();
 
-	println!("\nPerforming {} pings...", fmt::number(PING_TEST_COUNT));
+	println!("\nPerforming {} pings", fmt::number(PING_TEST_COUNT));
 
 	let mut progress = Progress::new(PING_TEST_COUNT, &[
 		Tag::Tps,
@@ -85,7 +85,7 @@ async fn main() {
 		let reader = BinaryReader::<Access>::new(trace_path)
 			.expect("Invalid trace path.");
 
-		println!("\nProcessing {} accesses...", fmt::number(reader.size() / Access::size() as u64));
+		println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::size() as u64));
 
 		let mut progress = Progress::new(reader.size(), &[
 			Tag::Tps,
@@ -114,40 +114,4 @@ async fn main() {
 	stats.print_ping_stats();
 	stats.print_get_stats();
 	stats.print_set_stats();
-}
-
-fn print_avg_size(label: &str, num: u64, total_size: u64) {
-	if num == 0 || total_size == 0 {
-		return;
-	}
-
-	let avg_size = total_size / num;
-
-	println!(
-		"Avg {label} size:\t{} ({} B)",
-		fmt::memory(avg_size, Some(2)),
-		avg_size,
-	);
-}
-
-fn print_stat_rate(label: &str, num: u64, total_time: u64) {
-	if num == 0 || total_time == 0 {
-		return;
-	}
-
-	let rate = num as f64 / (total_time / 1_000_000) as f64;
-
-	println!("{label}s per sec:\t{}", fmt::number(rate as u64));
-}
-
-fn print_stat_time(label: &str, num: u64, total_time: u64) {
-	if num == 0 || total_time == 0 {
-		return;
-	}
-
-	println!(
-		"Time per {label}:\t{} ({}s)",
-		(total_time as f64 / num as f64).round(),
-		std::char::from_u32(0x03bc).unwrap(),
-	);
 }
