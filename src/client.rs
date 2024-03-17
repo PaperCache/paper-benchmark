@@ -46,7 +46,6 @@ impl BenchmarkClient {
 				ClientEvent::Ping => self.handle_ping()?,
 				ClientEvent::Access(access) => self.handle_access(access)?,
 			}
-
 		}
 
 		Ok(self.stats.clone())
@@ -54,8 +53,9 @@ impl BenchmarkClient {
 
 	fn handle_ping(&mut self) -> Result<(), PaperClientError> {
 		let start_time = Instant::now();
+
 		self.client.ping()?;
-		self.stats.ping(start_time.elapsed());
+		self.stats.store_ping_time(start_time.elapsed());
 
 		Ok(())
 	}

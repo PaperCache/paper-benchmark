@@ -21,7 +21,7 @@ pub struct Stats {
 }
 
 impl Stats {
-	pub fn ping(&mut self, duration: Duration) {
+	pub fn store_ping_time(&mut self, duration: Duration) {
 		let time = duration.as_micros() as u64;
 
 		self.ping_total_time += time;
