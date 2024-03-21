@@ -24,9 +24,15 @@ impl BenchmarkClient {
 	pub fn new(
 		host: &str,
 		port: u32,
+		auth: Option<String>,
 		events: ClientReceiver,
 	) -> Result<Self, PaperClientError> {
 		let mut client = PaperClient::new(host, port)?;
+
+		if let Some(token) = &auth {
+			client.auth(token)?;
+		}
+
 		client.wipe()?;
 
 		let benchmark_client = BenchmarkClient {

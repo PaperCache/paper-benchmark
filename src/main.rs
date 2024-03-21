@@ -31,6 +31,9 @@ struct Args {
 	port: u32,
 
 	#[arg(short, long)]
+	auth: Option<String>,
+
+	#[arg(short, long)]
 	trace_path: Option<String>,
 
 	#[arg(short, long, default_value_t = 4)]
@@ -54,7 +57,7 @@ async fn main() {
 			let host = host.clone();
 			let receiver = receiver.clone();
 
-			BenchmarkClient::new(&host, args.port, receiver)
+			BenchmarkClient::new(&host, args.port, args.auth.clone(), receiver)
 				.expect("Could not create client.")
 		})
 		.collect::<Vec<BenchmarkClient>>();
