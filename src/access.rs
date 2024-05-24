@@ -1,9 +1,10 @@
 use std::io::{Cursor, Error, ErrorKind};
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use kwik::{
-	binary_reader::{SizedChunk, Chunk as ReadChunk},
-	binary_writer::Chunk as WriteChunk,
+use kwik::file::binary::{
+	SizedChunk,
+	ReadChunk,
+	WriteChunk,
 };
 
 pub enum Command {

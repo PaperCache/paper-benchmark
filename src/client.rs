@@ -22,12 +22,11 @@ pub enum ClientEvent {
 
 impl BenchmarkClient {
 	pub fn new(
-		host: &str,
-		port: u32,
+		paper_addr: &str,
 		auth: Option<String>,
 		events: ClientReceiver,
 	) -> Result<Self, PaperClientError> {
-		let mut client = PaperClient::new(host, port)?;
+		let mut client = PaperClient::new(paper_addr)?;
 
 		if let Some(token) = &auth {
 			client.auth(token)?;
@@ -84,11 +83,12 @@ impl BenchmarkClient {
 
 			Command::Set => {
 				let start_time = Instant::now();
+				let size = access.value.len() as u64;
 
-				self.client.set(&access.key, &access.value, access.ttl)?;
+				self.client.set(&access.key, access.value, access.ttl)?;
 
 				self.stats.store_set_time(start_time.elapsed());
-				self.stats.store_set_size(access.value.len() as u64);
+				self.stats.store_set_size(size);
 			},
 		}
 

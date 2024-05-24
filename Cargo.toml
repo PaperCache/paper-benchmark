@@ -1,14 +1,14 @@
 [package]
 name = "paper-benchmark"
-version = "1.2.1"
+version = "1.2.2"
 edition = "2021"
 
 [dependencies]
-paper_client = { git = "ssh://git@github.com/Paper-Book/paper-client-rs.git", tag = "v2.1.0" }
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.0.0" }
-clap = { version = "4.4.7", features = ["derive"] }
+paper_client = { git = "ssh://git@github.com/Paper-Book/paper-client-rs.git", tag = "v2.3.3" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.6.2" }
+clap = { version = "4.5.4", features = ["derive"] }
 byteorder = "1.5.0"
-crossbeam-channel = "0.5.12"
+crossbeam-channel = "0.5.13"
 tokio = { version = "1", features = ["full"] }
 
 [[bin]]

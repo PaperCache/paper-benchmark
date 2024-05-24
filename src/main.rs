@@ -8,9 +8,11 @@ use crossbeam_channel::bounded;
 
 use kwik::{
 	fmt,
-	FileReader,
+	file::{
+		FileReader,
+		binary::{BinaryReader, SizedChunk},
+	},
 	progress::{Progress, Tag},
-	binary_reader::{BinaryReader, SizedChunk},
 };
 
 use crate::{
@@ -46,7 +48,8 @@ async fn main() {
 
 	assert!(args.clients > 0);
 
-	let host = Arc::new(args.host);
+	let paper_addr = format!("paper://{}:{}", args.host, args.port);
+	let paper_addr = Arc::new(paper_addr);
 
 	let (sender, receiver) = bounded::<ClientEvent>(args.clients as usize);
 
@@ -54,10 +57,10 @@ async fn main() {
 
 	let clients = (0..args.clients)
 		.map(|_| {
-			let host = host.clone();
+			let paper_addr = paper_addr.clone();
 			let receiver = receiver.clone();
 
-			BenchmarkClient::new(&host, args.port, args.auth.clone(), receiver)
+			BenchmarkClient::new(&paper_addr, args.auth.clone(), receiver)
 				.expect("Could not create client.")
 		})
 		.collect::<Vec<BenchmarkClient>>();
@@ -71,11 +74,10 @@ async fn main() {
 
 	println!("\nPerforming {} pings", fmt::number(PING_TEST_COUNT));
 
-	let mut progress = Progress::new(PING_TEST_COUNT, &[
-		Tag::Tps,
-		Tag::Eta,
-		Tag::Time,
-	]);
+	let mut progress = Progress::new(PING_TEST_COUNT)
+		.with_tag(Tag::Tps)
+		.with_tag(Tag::Eta)
+		.with_tag(Tag::Time);
 
 	for _ in 0..PING_TEST_COUNT {
 		sender.send(ClientEvent::Ping)
@@ -90,11 +92,10 @@ async fn main() {
 
 		println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::size() as u64));
 
-		let mut progress = Progress::new(reader.size(), &[
-			Tag::Tps,
-			Tag::Eta,
-			Tag::Time,
-		]);
+		let mut progress = Progress::new(reader.size())
+			.with_tag(Tag::Tps)
+			.with_tag(Tag::Eta)
+			.with_tag(Tag::Time);
 
 		for access in reader {
 			sender.send(ClientEvent::Access(access))
