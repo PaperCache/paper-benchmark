@@ -72,18 +72,20 @@ async fn main() {
 		}))
 		.collect::<Vec<_>>();
 
-	println!("\nPerforming {} pings", fmt::number(PING_TEST_COUNT));
+	if args.trace_path.is_none() {
+		println!("\nPerforming {} pings", fmt::number(PING_TEST_COUNT));
 
-	let mut progress = Progress::new(PING_TEST_COUNT)
-		.with_tag(Tag::Tps)
-		.with_tag(Tag::Eta)
-		.with_tag(Tag::Time);
+		let mut progress = Progress::new(PING_TEST_COUNT)
+			.with_tag(Tag::Tps)
+			.with_tag(Tag::Eta)
+			.with_tag(Tag::Time);
 
-	for _ in 0..PING_TEST_COUNT {
-		sender.send(ClientEvent::Ping)
-			.expect("Could not send ping to client.");
+		for _ in 0..PING_TEST_COUNT {
+			sender.send(ClientEvent::Ping)
+				.expect("Could not send ping to client.");
 
-		progress.tick(1);
+			progress.tick(1);
+		}
 	}
 
 	if let Some(trace_path) = &args.trace_path {
