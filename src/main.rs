@@ -89,7 +89,7 @@ async fn main() {
 	}
 
 	if let Some(trace_path) = &args.trace_path {
-		let reader = BinaryReader::<Access>::new(trace_path)
+		let reader = BinaryReader::<Access>::from_path(trace_path)
 			.expect("Invalid trace path.");
 
 		println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::size() as u64));
