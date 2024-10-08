@@ -1,20 +1,28 @@
 use std::{
+	io,
 	ops::AddAssign,
 	time::Duration,
-	collections::BTreeMap,
 };
 
-use kwik::fmt;
+use statrs::statistics::{Data, OrderStatistics};
+
+use kwik::{
+	fmt,
+	table::{
+		Table,
+		Row,
+		Align,
+		Style,
+	},
+};
+
+type LatencyData = Data<Vec<f64>>;
 
 #[derive(Debug, Default, Clone)]
 pub struct Stats {
-	ping_times: BTreeMap<u64, u64>,
-	get_times: BTreeMap<u64, u64>,
-	set_times: BTreeMap<u64, u64>,
-
-	ping_total_time: u64,
-	get_total_time: u64,
-	set_total_time: u64,
+	ping_latencies: Vec<Duration>,
+	get_latencies: Vec<Duration>,
+	set_latencies: Vec<Duration>,
 
 	get_total_size: u64,
 	set_total_size: u64,
@@ -22,16 +30,11 @@ pub struct Stats {
 
 impl Stats {
 	pub fn store_ping_time(&mut self, duration: Duration) {
-		let time = duration.as_micros() as u64;
-
-		self.ping_total_time += time;
-		record_time(&mut self.ping_times, time);
+		self.ping_latencies.push(duration);
 	}
 
 	pub fn store_get_time(&mut self, duration: Duration) {
-		let time = duration.as_micros() as u64;
-		self.get_total_time += time;
-		record_time(&mut self.get_times, time);
+		self.get_latencies.push(duration);
 	}
 
 	pub fn store_get_size(&mut self, size: u64) {
@@ -39,9 +42,7 @@ impl Stats {
 	}
 
 	pub fn store_set_time(&mut self, duration: Duration) {
-		let time = duration.as_micros() as u64;
-		self.set_total_time += time;
-		record_time(&mut self.set_times, time);
+		self.set_latencies.push(duration);
 	}
 
 	pub fn store_set_size(&mut self, size: u64) {
@@ -49,90 +50,44 @@ impl Stats {
 	}
 
 	pub fn print_ping_stats(&self) {
-		let total_pings = self.ping_times.values().sum();
-
-		if total_pings == 0 {
-			return;
-		}
-
-		println!("\n*** PING stats ***\n");
-		print_times(&self.ping_times, total_pings);
-
-		println!(
-			"\nAvg latency:\t{} ({}s)",
-			(self.ping_total_time as f64 / total_pings as f64).round(),
-			std::char::from_u32(0x03bc).unwrap(),
-		);
-
-		let ping_rate = total_pings as f64 / (self.ping_total_time / 1_000_000) as f64;
-		println!("PINGs/sec:\t{}", fmt::number(ping_rate as u64));
+		print_stats("PING", &self.ping_latencies);
 	}
 
 	pub fn print_get_stats(&self) {
-		let total_gets = self.get_times.values().sum();
+		print_stats("GET", &self.get_latencies);
 
-		if total_gets == 0 {
-			return;
+		if !self.get_latencies.is_empty() {
+			let avg_size = (self.get_total_size as f64 / self.get_latencies.len() as f64) as u64;
+
+			println!(
+				"Avg GET size:\t{} ({} B)",
+				fmt::memory(avg_size, Some(2)),
+				avg_size,
+			);
 		}
-
-		println!("\n*** GET stats ***\n");
-		print_times(&self.get_times, total_gets);
-
-		println!(
-			"\nAvg latency:\t{} ({}s)",
-			(self.get_total_time as f64 / total_gets as f64).round(),
-			std::char::from_u32(0x03bc).unwrap(),
-		);
-
-		let get_rate = total_gets as f64 / (self.get_total_time / 1_000_000) as f64;
-		println!("GETs/sec:\t{}", fmt::number(get_rate as u64));
-
-		let avg_size = (self.get_total_size as f64 / total_gets as f64) as u64;
-		println!(
-			"Avg GET size:\t{} ({} B)",
-			fmt::memory(avg_size, Some(2)),
-			avg_size,
-		);
 	}
 
 	pub fn print_set_stats(&self) {
-		let total_sets = self.set_times.values().sum();
+		print_stats("SET", &self.set_latencies);
 
-		if total_sets == 0 {
-			return;
+		if !self.set_latencies.is_empty() {
+			let avg_size = (self.set_total_size as f64 / self.set_latencies.len() as f64) as u64;
+
+			println!(
+				"Avg SET size:\t{} ({} B)",
+				fmt::memory(avg_size, Some(2)),
+				avg_size,
+			);
 		}
-
-		println!("\n*** SET stats ***\n");
-		print_times(&self.set_times, total_sets);
-
-		println!(
-			"\nAvg latency:\t{} ({}s)",
-			(self.set_total_time as f64 / total_sets as f64).round(),
-			std::char::from_u32(0x03bc).unwrap(),
-		);
-
-		let set_rate = total_sets as f64 / (self.set_total_time / 1_000_000) as f64;
-		println!("SETs/sec:\t{}", fmt::number(set_rate as u64));
-
-		let avg_size = (self.set_total_size as f64 / total_sets as f64) as u64;
-		println!(
-			"Avg SET size:\t{} ({} B)",
-			fmt::memory(avg_size, Some(2)),
-			avg_size,
-		);
 	}
 }
 
 impl AddAssign for Stats {
 	fn add_assign(&mut self, rhs: Self) {
 		*self = Stats {
-			ping_times: merge_times(&self.ping_times, &rhs.ping_times),
-			get_times: merge_times(&self.get_times, &rhs.get_times),
-			set_times: merge_times(&self.set_times, &rhs.set_times),
-
-			ping_total_time: self.ping_total_time + rhs.ping_total_time,
-			get_total_time: self.get_total_time + rhs.get_total_time,
-			set_total_time: self.set_total_time + rhs.set_total_time,
+			ping_latencies: merge_times(&self.ping_latencies, &rhs.ping_latencies),
+			get_latencies: merge_times(&self.get_latencies, &rhs.get_latencies),
+			set_latencies: merge_times(&self.set_latencies, &rhs.set_latencies),
 
 			get_total_size: self.get_total_size + rhs.get_total_size,
 			set_total_size: self.set_total_size + rhs.set_total_size,
@@ -140,72 +95,87 @@ impl AddAssign for Stats {
 	}
 }
 
-fn print_times(times: &BTreeMap<u64, u64>, total_count: u64) {
-	println!("Latency distribution:");
+fn print_stats(label: &'static str, durations: &[Duration]) {
+	let latencies = durations
+		.iter()
+		.map(|duration| duration.as_micros() as f64)
+		.collect::<Vec<_>>();
 
-	let mut count_sum = 0;
+	let mut data = Data::new(latencies);
 
-	for (time, count) in times.iter() {
-		count_sum += count;
-
-		let ratio = count_sum as f64 / total_count as f64;
-
-		println!(
-			"<= {} {}s\t{:.2} %",
-			time,
-			std::char::from_u32(0x03bc).unwrap(),
-			ratio * 100.0,
-		);
-
-		if ratio >= 0.99 {
-			break;
-		}
+	if data.is_empty() {
+		return;
 	}
 
-	if count_sum != total_count {
-		if let Some((time, _)) = times.last_key_value() {
-			println!(
-				"<= {} {}s\t{:.2} %",
-				time,
-				std::char::from_u32(0x03bc).unwrap(),
-				100,
-			);
-		}
-	}
+	println!("\n*** {label} stats ***\n");
+
+	print_dist(&mut data);
+	print_simple_stats(label, &data);
 }
 
-fn merge_times(
-	times_a: &BTreeMap<u64, u64>,
-	times_b: &BTreeMap<u64, u64>,
-) -> BTreeMap<u64, u64> {
-	let mut map = BTreeMap::<u64, u64>::new();
-	map.extend(times_a);
+fn print_dist(data: &mut LatencyData) {
+	let mut table = Table::default();
 
-	for (time_b, count_b) in times_b {
-		match map.get_mut(time_b) {
-			Some(count) => *count += count_b,
+	let quantiles: &[f64] = &[
+		0.5,
+		0.75,
+		0.90,
+		0.95,
+		0.99,
+		0.999,
+		0.9999,
+		0.99999,
+		1.0,
+	];
 
-			None => {
-				map.insert(*time_b, *count_b);
-			},
-		}
+	let mut header = Row::default();
+	let mut row = Row::default();
+
+	for quantile in quantiles {
+		let multiplier = match quantile {
+			0.999 => 1000.0,
+			0.9999 => 10000.0,
+			0.99999 => 100000.0,
+			_ => 100.0,
+		};
+
+		let label = format!("p{}", (quantile * multiplier).round());
+		let value = format!("{:.0}us", data.quantile(*quantile));
+
+		header = header.push(label, Align::Center, Style::Bold);
+		row = row.push(value, Align::Center, Style::Normal);
 	}
 
-	map
+	table.set_header(header);
+	table.add_row(row);
+
+	let mut stdout = io::stdout().lock();
+	table.print(&mut stdout);
 }
 
-fn record_time(times: &mut BTreeMap<u64, u64>, time: u64) {
-	let time = get_rounded_time(time);
+fn print_simple_stats(label: &'static str, data: &LatencyData) {
+	let total_time = data
+		.iter()
+		.sum::<f64>();
 
-	match times.get_mut(&time) {
-		Some(count) => *count += 1,
+	println!(
+		"\nAvg latency:\t{}us",
+		(total_time / data.len() as f64).round(),
+	);
 
-		None => {
-			times.insert(time, 1);
-		},
-	}
+	let rate = data.len() as f64 / (total_time / 1_000_000.0);
+
+	println!(
+		"{label}s/sec:\t{}",
+		fmt::number(rate as u64),
+	);
 }
 
-fn get_rounded_time(time: u64) -> u64 {
-	(time as f64 / 10.0).round() as u64 * 10
+fn merge_times(times_a: &[Duration], times_b: &[Duration]) -> Vec<Duration> {
+	let mut times = Vec::<Duration>::new();
+
+	times.extend_from_slice(times_a);
+	times.extend_from_slice(times_b);
+
+	times
 }
