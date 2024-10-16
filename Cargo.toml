@@ -5,11 +5,10 @@ edition = "2021"
 
 [dependencies]
 paper_client = { git = "ssh://git@github.com/Paper-Book/paper-client-rs.git", tag = "v2.5.2" }
-kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.10.1" }
+kwik = { git = "https://github.com/KiaShakiba/kwik.git", tag = "v1.11.0" }
 clap = { version = "4.5.19", features = ["derive"] }
 byteorder = "1.5.0"
 crossbeam-channel = "0.5.13"
-tokio = { version = "1", features = ["full"] }
 statrs = "0.17.1"
 
 [[bin]]

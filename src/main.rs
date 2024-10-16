@@ -2,7 +2,11 @@ mod access;
 mod client;
 mod stats;
 
-use std::sync::Arc;
+use std::{
+	thread,
+	sync::Arc,
+};
+
 use clap::Parser;
 use crossbeam_channel::bounded;
 
@@ -42,8 +46,7 @@ struct Args {
 	clients: u32,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	let args = Args::parse();
 
 	assert!(args.clients > 0);
@@ -67,9 +70,7 @@ async fn main() {
 
 	let tasks = clients
 		.into_iter()
-		.map(|mut client| tokio::spawn(async move {
-			client.run()
-		}))
+		.map(|mut client| thread::spawn(move || client.run()))
 		.collect::<Vec<_>>();
 
 	if args.trace_path.is_none() {
@@ -112,7 +113,8 @@ async fn main() {
 	let mut stats = Stats::default();
 
 	for task in tasks {
-		stats += task.await
+		stats += task
+			.join()
 			.expect("Could not terminate client")
 			.expect("Error executing client requests");
 	}
