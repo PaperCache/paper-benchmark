@@ -5,6 +5,7 @@ mod stats;
 use std::{
 	thread,
 	sync::Arc,
+	path::PathBuf,
 };
 
 use clap::Parser;
@@ -40,10 +41,13 @@ struct Args {
 	auth: Option<String>,
 
 	#[arg(short, long)]
-	trace_path: Option<String>,
+	trace_path: Option<PathBuf>,
 
 	#[arg(short, long, default_value_t = 4)]
 	clients: u32,
+
+	#[arg(short, long)]
+	output: Option<PathBuf>,
 }
 
 fn main() {
@@ -122,4 +126,9 @@ fn main() {
 	stats.print_ping_stats();
 	stats.print_get_stats();
 	stats.print_set_stats();
+
+	if let Some(path) = args.output {
+		stats.save_latency_plot(path)
+			.expect("Could not save latency plot.");
+	}
 }

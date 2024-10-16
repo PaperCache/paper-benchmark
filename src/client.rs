@@ -60,7 +60,7 @@ impl BenchmarkClient {
 		let start_time = Instant::now();
 
 		self.client.ping()?;
-		self.stats.store_ping_time(start_time.elapsed());
+		self.stats.store_ping_time(start_time, start_time.elapsed());
 
 		Ok(())
 	}
@@ -78,7 +78,7 @@ impl BenchmarkClient {
 					self.stats.store_get_size(access.value.len() as u64);
 				}
 
-				self.stats.store_get_time(start_time.elapsed());
+				self.stats.store_get_time(start_time, start_time.elapsed());
 			},
 
 			Command::Set => {
@@ -87,7 +87,7 @@ impl BenchmarkClient {
 
 				self.client.set(access.key, access.value, access.ttl)?;
 
-				self.stats.store_set_time(start_time.elapsed());
+				self.stats.store_set_time(start_time, start_time.elapsed());
 				self.stats.store_set_size(size);
 			},
 		}

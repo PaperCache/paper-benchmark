@@ -1,48 +1,56 @@
 use std::{
 	io,
 	ops::AddAssign,
-	time::Duration,
+	path::Path,
+	time::{Instant, Duration},
 };
 
 use statrs::statistics::{Data, OrderStatistics};
 
 use kwik::{
 	fmt,
+	math,
 	table::{
 		Table,
 		Row,
 		Align,
 		Style,
 	},
+	plot::{
+		Plot,
+		Figure,
+		line_plot::{LinePlot, Line},
+	},
+	tma::TimeMovingAverage,
 };
 
 type LatencyData = Data<Vec<f64>>;
 
 #[derive(Debug, Default, Clone)]
 pub struct Stats {
-	ping_latencies: Vec<Duration>,
-	get_latencies: Vec<Duration>,
-	set_latencies: Vec<Duration>,
+	ping_latencies: Vec<(Instant, Duration)>,
+	get_latencies: Vec<(Instant, Duration)>,
+	set_latencies: Vec<(Instant, Duration)>,
 
 	get_total_size: u64,
 	set_total_size: u64,
 }
 
 impl Stats {
-	pub fn store_ping_time(&mut self, duration: Duration) {
-		self.ping_latencies.push(duration);
+	pub fn store_ping_time(&mut self, instant: Instant, duration: Duration) {
+		self.ping_latencies.push((instant, duration));
 	}
 
-	pub fn store_get_time(&mut self, duration: Duration) {
-		self.get_latencies.push(duration);
+	pub fn store_get_time(&mut self, instant: Instant, duration: Duration) {
+		self.get_latencies.push((instant, duration));
 	}
 
 	pub fn store_get_size(&mut self, size: u64) {
 		self.get_total_size += size;
 	}
 
-	pub fn store_set_time(&mut self, duration: Duration) {
-		self.set_latencies.push(duration);
+	pub fn store_set_time(&mut self, instant: Instant, duration: Duration) {
+		self.set_latencies.push((instant, duration));
 	}
 
 	pub fn store_set_size(&mut self, size: u64) {
@@ -80,6 +88,110 @@ impl Stats {
 			);
 		}
 	}
+
+	pub fn save_latency_plot<P>(&self, path: P) -> io::Result<()>
+	where
+		P: AsRef<Path>,
+	{
+		let mut plot = LinePlot::default()
+			.with_title("Paper latency")
+			.with_x_label("Time (s)")
+			.with_y_label("Latency (us)")
+			.with_x_min(0)
+			.with_y_min(0);
+
+		let mut ping_line = Line::default().with_label("Ping");
+		let mut get_line = Line::default().with_label("Get");
+		let mut set_line = Line::default().with_label("Set");
+
+		if let Some((initial_instant, final_instant)) = self.get_initial_instant().zip(self.get_final_instant()) {
+			plot.set_x_max(final_instant.duration_since(initial_instant).as_secs_f64());
+
+			let mut ping_tma = TimeMovingAverage::default();
+			let mut get_tma = TimeMovingAverage::default();
+			let mut set_tma = TimeMovingAverage::default();
+
+			for (instant, duration) in &self.ping_latencies {
+				ping_tma.push(*instant, duration.as_micros());
+			}
+
+			for (instant, duration) in &self.get_latencies {
+				get_tma.push(*instant, duration.as_micros());
+			}
+
+			for (instant, duration) in &self.set_latencies {
+				set_tma.push(*instant, duration.as_micros());
+			}
+
+			let window = final_instant.duration_since(initial_instant) / 50;
+
+			for (instant, value) in ping_tma.window_iter(window) {
+				ping_line.push(
+					instant.duration_since(initial_instant).as_secs_f64(),
+					value,
+				);
+			}
+
+			for (instant, value) in get_tma.window_iter(window) {
+				get_line.push(
+					instant.duration_since(initial_instant).as_secs_f64(),
+					value,
+				);
+			}
+
+			for (instant, value) in set_tma.window_iter(window) {
+				set_line.push(
+					instant.duration_since(initial_instant).as_secs_f64(),
+					value,
+				);
+			}
+		}
+
+		if !ping_line.is_empty() {
+			plot.line(ping_line);
+		}
+
+		if !get_line.is_empty() {
+			plot.line(get_line);
+		}
+
+		if !set_line.is_empty() {
+			plot.line(set_line);
+		}
+
+		let mut figure = Figure::default();
+
+		figure.add(plot);
+		figure.save(path)
+	}
+
+	fn get_initial_instant(&self) -> Option<Instant> {
+		let ping_initial_instant = self.ping_latencies.first().map(|(instant, _)| *instant);
+		let get_initial_instant = self.get_latencies.first().map(|(instant, _)| *instant);
+		let set_initial_instant = self.set_latencies.first().map(|(instant, _)| *instant);
+
+		let instants = &[ping_initial_instant, get_initial_instant, set_initial_instant]
+			.iter()
+			.flatten()
+			.copied()
+			.collect::<Vec<_>>();
+
+		math::min(instants).copied()
+	}
+
+	fn get_final_instant(&self) -> Option<Instant> {
+		let ping_final_instant = self.ping_latencies.last().map(|(instant, _)| *instant);
+		let get_final_instant = self.get_latencies.last().map(|(instant, _)| *instant);
+		let set_final_instant = self.set_latencies.last().map(|(instant, _)| *instant);
+
+		let instants = &[ping_final_instant, get_final_instant, set_final_instant]
+			.iter()
+			.flatten()
+			.copied()
+			.collect::<Vec<_>>();
+
+		math::max(instants).copied()
+	}
 }
 
 impl AddAssign for Stats {
@@ -95,10 +207,10 @@ impl AddAssign for Stats {
 	}
 }
 
-fn print_stats(label: &'static str, durations: &[Duration]) {
-	let latencies = durations
+fn print_stats(label: &'static str, times: &[(Instant, Duration)]) {
+	let latencies = times
 		.iter()
-		.map(|duration| duration.as_micros() as f64)
+		.map(|(_, duration)| duration.as_micros() as f64)
 		.collect::<Vec<_>>();
 
 	let mut data = Data::new(latencies);
@@ -171,11 +283,13 @@ fn print_simple_stats(label: &'static str, data: &LatencyData) {
 	);
 }
 
-fn merge_times(times_a: &[Duration], times_b: &[Duration]) -> Vec<Duration> {
-	let mut times = Vec::<Duration>::new();
+fn merge_times(times_a: &[(Instant, Duration)], times_b: &[(Instant, Duration)]) -> Vec<(Instant, Duration)> {
+	let mut times = Vec::<(Instant, Duration)>::new();
 
 	times.extend_from_slice(times_a);
 	times.extend_from_slice(times_b);
+
+	times.sort_unstable_by_key(|(instant, _)| *instant);
 
 	times
 }
