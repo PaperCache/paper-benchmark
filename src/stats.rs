@@ -21,6 +21,10 @@ use kwik::{
 		Figure,
 		line_plot::{LinePlot, Line},
 	},
+	file::{
+		FileWriter,
+		csv::{CsvWriter, RowData, WriteRow},
+	},
 	tma::TimeMovingAverage,
 };
 
@@ -34,6 +38,14 @@ pub struct Stats {
 
 	get_total_size: u64,
 	set_total_size: u64,
+}
+
+struct PercentileLatency {
+	percentile: usize,
+
+	ping_latency: Option<f64>,
+	get_latency: Option<f64>,
+	set_latency: Option<f64>,
 }
 
 impl Stats {
@@ -87,6 +99,79 @@ impl Stats {
 				avg_size,
 			);
 		}
+	}
+
+	pub fn save_latency_percentiles<P>(&self, path: P) -> io::Result<()>
+	where
+		P: AsRef<Path>,
+	{
+		let mut headers: Vec<&str> = vec!["Percentile"];
+
+		if !self.ping_latencies.is_empty() {
+			headers.push("Ping");
+		}
+
+		if !self.get_latencies.is_empty() {
+			headers.push("Get");
+		}
+
+		if !self.set_latencies.is_empty() {
+			headers.push("Set");
+		}
+
+		let mut writer = CsvWriter::<PercentileLatency>::from_path(path)?
+			.with_headers(&headers)?;
+
+		let ping_latencies = self.ping_latencies
+			.iter()
+			.map(|(_, duration)| duration.as_micros() as f64)
+			.collect::<Vec<_>>();
+
+		let get_latencies = self.get_latencies
+			.iter()
+			.map(|(_, duration)| duration.as_micros() as f64)
+			.collect::<Vec<_>>();
+
+		let set_latencies = self.set_latencies
+			.iter()
+			.map(|(_, duration)| duration.as_micros() as f64)
+			.collect::<Vec<_>>();
+
+		let mut ping_data = Data::new(ping_latencies);
+		let mut get_data = Data::new(get_latencies);
+		let mut set_data = Data::new(set_latencies);
+
+		for percentile in 1..=100 {
+			let ping_latency = if !self.ping_latencies.is_empty() {
+				Some(ping_data.percentile(percentile))
+			} else {
+				None
+			};
+
+			let get_latency = if !self.get_latencies.is_empty() {
+				Some(get_data.percentile(percentile))
+			} else {
+				None
+			};
+
+			let set_latency = if !self.set_latencies.is_empty() {
+				Some(set_data.percentile(percentile))
+			} else {
+				None
+			};
+
+			let percentile_latency = PercentileLatency {
+				percentile,
+
+				ping_latency,
+				get_latency,
+				set_latency,
+			};
+
+			writer.write_row(&percentile_latency)?;
+		}
+
+		Ok(())
 	}
 
 	pub fn save_latency_plot<P>(&self, path: P) -> io::Result<()>
@@ -292,4 +377,24 @@ fn merge_times(times_a: &[(Instant, Duration)], times_b: &[(Instant, Duration)])
 	times.sort_unstable_by_key(|(instant, _)| *instant);
 
 	times
+}
+
+impl WriteRow for PercentileLatency {
+	fn as_row(&self, row: &mut RowData) -> io::Result<()> {
+		row.push(self.percentile);
+
+		if let Some(latency) = self.ping_latency {
+			row.push(latency);
+		}
+
+		if let Some(latency) = self.get_latency {
+			row.push(latency);
+		}
+
+		if let Some(latency) = self.set_latency {
+			row.push(latency);
+		}
+
+		Ok(())
+	}
 }

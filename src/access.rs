@@ -27,7 +27,7 @@ impl SizedChunk for Access {
 }
 
 impl ReadChunk for Access {
-	fn new(buf: &[u8]) -> Result<Self, Error> {
+	fn from_chunk(buf: &[u8]) -> Result<Self, Error> {
 		let mut rdr = Cursor::new(buf);
 
 		let Ok(timestamp) = rdr.read_u64::<LittleEndian>() else {

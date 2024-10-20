@@ -46,8 +46,11 @@ struct Args {
 	#[arg(short, long, default_value_t = 4)]
 	clients: u32,
 
-	#[arg(short, long)]
-	output: Option<PathBuf>,
+	#[arg(long)]
+	output_csv: Option<PathBuf>,
+
+	#[arg(long)]
+	output_plot: Option<PathBuf>,
 }
 
 fn main() {
@@ -127,8 +130,21 @@ fn main() {
 	stats.print_get_stats();
 	stats.print_set_stats();
 
-	if let Some(path) = args.output {
+	if args.output_csv.is_some() || args.output_plot.is_some() {
+		println!();
+	}
+
+	if let Some(path) = &args.output_csv {
+		stats.save_latency_percentiles(path)
+			.expect("Could not save latency percentiles.");
+
+		println!("Saved CSV to <{}>.", path.to_str().unwrap_or(""));
+	}
+
+	if let Some(path) = &args.output_plot {
 		stats.save_latency_plot(path)
 			.expect("Could not save latency plot.");
+
+		println!("Saved plot to <{}>.", path.to_str().unwrap_or(""));
 	}
 }
