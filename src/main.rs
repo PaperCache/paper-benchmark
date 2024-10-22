@@ -5,7 +5,9 @@ mod stats;
 use std::{
 	thread,
 	sync::Arc,
-	path::PathBuf,
+	io::{self, Seek, SeekFrom},
+	path::{Path, PathBuf},
+	time::Duration,
 };
 
 use clap::Parser;
@@ -45,6 +47,9 @@ struct Args {
 
 	#[arg(short, long, default_value_t = 4)]
 	clients: u32,
+
+	#[arg(short, long)]
+	native_time: bool,
 
 	#[arg(long)]
 	output_csv: Option<PathBuf>,
@@ -97,6 +102,14 @@ fn main() {
 	}
 
 	if let Some(trace_path) = &args.trace_path {
+		if args.native_time {
+			let timespan = get_trace_timespan(trace_path)
+				.expect("Invalid trace path.");
+
+			println!("\nUsing native access time.");
+			println!("Total trace timestamp: {}", fmt::timespan(timespan));
+		}
+
 		let reader = BinaryReader::<Access>::from_path(trace_path)
 			.expect("Invalid trace path.");
 
@@ -107,7 +120,24 @@ fn main() {
 			.with_tag(Tag::Eta)
 			.with_tag(Tag::Time);
 
-		for access in reader {
+		let mut prev_access_timestamp: Option<u64> = None;
+
+		for mut access in reader {
+			if args.native_time {
+				let prev_timestamp = prev_access_timestamp.unwrap_or(access.timestamp);
+
+				if prev_timestamp > access.timestamp {
+					panic!("Invalid timestamp order.");
+				}
+
+				let sleep_duration = Duration::from_millis(access.timestamp - prev_timestamp);
+				spin_sleep::sleep(sleep_duration);
+
+				prev_access_timestamp = Some(access.timestamp);
+			} else {
+				access.ttl = None;
+			}
+
 			sender.send(ClientEvent::Access(access))
 				.expect("Could not send access to client.");
 
@@ -147,4 +177,21 @@ fn main() {
 
 		println!("Saved plot to <{}>.", path.to_str().unwrap_or(""));
 	}
+}
+
+fn get_trace_timespan<P>(path: P) -> io::Result<u64>
+where
+	P: AsRef<Path>,
+{
+	let mut reader = BinaryReader::<Access>::from_path(path)?;
+	let first_access = reader.read_chunk()?;
+
+	reader.seek(SeekFrom::End(-(Access::size() as i64)))?;
+	let last_access = reader.read_chunk()?;
+
+	if last_access.timestamp < first_access.timestamp {
+		panic!("Invalid timestamp order.");
+	}
+
+	Ok(last_access.timestamp - first_access.timestamp)
 }

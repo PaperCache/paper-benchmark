@@ -1,4 +1,4 @@
-use std::io::{Cursor, Error, ErrorKind};
+use std::io::{self, Cursor};
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use kwik::file::binary::{
@@ -27,53 +27,24 @@ impl SizedChunk for Access {
 }
 
 impl ReadChunk for Access {
-	fn from_chunk(buf: &[u8]) -> Result<Self, Error> {
+	fn from_chunk(buf: &[u8]) -> io::Result<Self> {
 		let mut rdr = Cursor::new(buf);
 
-		let Ok(timestamp) = rdr.read_u64::<LittleEndian>() else {
-			return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access key."
-			));
-		};
+		let timestamp = rdr.read_u64::<LittleEndian>()?;
 
-		let command = match rdr.read_u8() {
-			Ok(byte) => Command::from_byte(byte)?,
+		let command_byte = rdr.read_u8()?;
+		let command = Command::from_byte(command_byte)?;
 
-			Err(_) => return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access command."
-			)),
-		};
+		let key = rdr
+			.read_u64::<LittleEndian>()?
+			.to_string();
 
-		let key = match rdr.read_u64::<LittleEndian>() {
-			Ok(key) => key.to_string(),
+		let value_size = rdr.read_u32::<LittleEndian>()?;
+		let value = [0u8].repeat(value_size as usize).into();
 
-			Err(_) => return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access key."
-			)),
-		};
-
-		let value = match rdr.read_u32::<LittleEndian>() {
-			Ok(size) => [0u8].repeat(size as usize).into(),
-
-			Err(_) => return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access size."
-			)),
-		};
-
-		let ttl = match rdr.read_u32::<LittleEndian>() {
-			Ok(ttl) => match ttl {
-				0 => None,
-				ttl => Some(ttl),
-			},
-
-			Err(_) => return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access ttl."
-			)),
+		let ttl = match rdr.read_u32::<LittleEndian>()? {
+			0 => None,
+			ttl => Some(ttl),
 		};
 
 		let access = Access {
@@ -91,13 +62,10 @@ impl ReadChunk for Access {
 }
 
 impl WriteChunk for Access {
-	fn as_chunk(&self, buf: &mut Vec<u8>) -> Result<(), Error> {
-		let Ok(key) = self.key.parse::<u64>() else {
-			return Err(Error::new(
-				ErrorKind::InvalidData,
-				"Invalid access key."
-			));
-		};
+	fn as_chunk(&self, buf: &mut Vec<u8>) -> io::Result<()> {
+		let key = self.key
+			.parse::<u64>()
+			.expect("Invalid access key.");
 
 		let size = self.value.len() as u32;
 
@@ -112,13 +80,13 @@ impl WriteChunk for Access {
 }
 
 impl Command {
-	fn from_byte(byte: u8) -> Result<Self, Error> {
+	fn from_byte(byte: u8) -> io::Result<Self> {
 		match byte {
 			0 => Ok(Command::Get),
 			1 => Ok(Command::Set),
 
-			_ => Err(Error::new(
-				ErrorKind::InvalidData,
+			_ => Err(io::Error::new(
+				io::ErrorKind::InvalidData,
 				"Invalid command byte."
 			)),
 		}
