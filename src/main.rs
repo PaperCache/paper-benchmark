@@ -23,7 +23,7 @@ use kwik::{
 };
 
 use crate::{
-	client::{BenchmarkClient, ClientEvent},
+	client::{BenchmarkClient, ClientType, ClientEvent},
 	access::Access,
 	stats::Stats,
 };
@@ -51,6 +51,9 @@ struct Args {
 	#[arg(short, long)]
 	native_time: bool,
 
+	#[arg(long, default_value_t = ClientType::Lookaside)]
+	client_type: ClientType,
+
 	#[arg(long)]
 	output_csv: Option<PathBuf>,
 
@@ -68,6 +71,7 @@ fn main() {
 
 	let (sender, receiver) = bounded::<ClientEvent>(args.clients as usize);
 
+	println!("Client type: {}", args.client_type);
 	println!("Initializing {} client(s)", args.clients);
 
 	let clients = (0..args.clients)
@@ -77,6 +81,7 @@ fn main() {
 
 			BenchmarkClient::new(&paper_addr, args.auth.clone(), receiver)
 				.expect("Could not create client.")
+				.with_client_type(args.client_type)
 		})
 		.collect::<Vec<BenchmarkClient>>();
 

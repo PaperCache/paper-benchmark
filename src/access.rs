@@ -7,6 +7,7 @@ use kwik::file::binary::{
 	WriteChunk,
 };
 
+#[derive(PartialEq)]
 pub enum Command {
 	Get,
 	Set,

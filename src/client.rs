@@ -1,4 +1,9 @@
-use std::time::{Instant, Duration};
+use std::{
+	fmt::{self, Display},
+	time::{Instant, Duration},
+};
+
+use clap::ValueEnum;
 use crossbeam_channel::Receiver;
 use paper_client::{PaperClient, PaperClientError};
 
@@ -13,6 +18,14 @@ pub struct BenchmarkClient {
 	client: PaperClient,
 	events: ClientReceiver,
 	stats: Stats,
+
+	client_type: ClientType,
+}
+
+#[derive(Debug, Copy, Clone, ValueEnum)]
+pub enum ClientType {
+	Lookaside,
+	ReadThrough,
 }
 
 pub enum ClientEvent {
@@ -38,9 +51,16 @@ impl BenchmarkClient {
 			client,
 			events,
 			stats: Stats::default(),
+
+			client_type: ClientType::Lookaside,
 		};
 
 		Ok(benchmark_client)
+	}
+
+	pub fn with_client_type(mut self, client_type: ClientType) -> Self {
+		self.client_type = client_type;
+		self
 	}
 
 	pub fn run(&mut self) -> Result<Stats, PaperClientError> {
@@ -60,38 +80,102 @@ impl BenchmarkClient {
 		let start_time = Instant::now();
 
 		self.client.ping()?;
-		self.stats.store_ping_time(start_time, start_time.elapsed());
+		self.stats.store_ping_time(start_time);
 
 		Ok(())
 	}
 
 	fn handle_access(&mut self, access: Access) -> Result<(), PaperClientError> {
+		match self.client_type {
+			ClientType::Lookaside => self.handle_lookaside(access),
+			ClientType::ReadThrough => self.handle_read_through(access),
+		}
+	}
+
+	fn handle_lookaside(&mut self, access: Access) -> Result<(), PaperClientError> {
 		match access.command {
 			Command::Get => {
 				let start_time = Instant::now();
 
-				if let Err(err) = self.client.get(&access.key) {
-					if !matches!(err, PaperClientError::CacheError(_)) {
-						return Err(err);
-					}
-				} else {
-					self.stats.store_get_size(access.value.len() as u64);
-				}
+				match self.client.get(&access.key) {
+					Ok(value) => {
+						self.stats.store_get_time(start_time);
 
-				self.stats.store_get_time(start_time, start_time.elapsed());
+						let value: &str = (&value)
+							.try_into()
+							.map_err(|_| PaperClientError::Internal)?;
+
+						self.stats.store_get_size(value.len() as u64);
+					},
+
+					Err(err) if !matches!(err, PaperClientError::CacheError(_)) => {
+						return Err(err);
+					},
+
+					Err(_) => {
+						self.stats.store_get_time(start_time);
+					},
+				}
 			},
 
 			Command::Set => {
-				let start_time = Instant::now();
 				let size = access.value.len() as u64;
+				let start_time = Instant::now();
 
 				self.client.set(access.key, access.value, access.ttl)?;
 
-				self.stats.store_set_time(start_time, start_time.elapsed());
+				self.stats.store_set_time(start_time);
 				self.stats.store_set_size(size);
 			},
 		}
 
 		Ok(())
+	}
+
+	fn handle_read_through(&mut self, access: Access) -> Result<(), PaperClientError> {
+		if access.command != Command::Get {
+			return Ok(());
+		}
+
+		let get_start_time = Instant::now();
+
+		match self.client.get(&access.key) {
+			Ok(value) => {
+				self.stats.store_get_time(get_start_time);
+
+				let value: &str = (&value)
+					.try_into()
+					.map_err(|_| PaperClientError::Internal)?;
+
+				self.stats.store_get_size(value.len() as u64);
+			},
+
+			Err(err) if !matches!(err, PaperClientError::CacheError(_)) => {
+				return Err(err);
+			},
+
+			Err(_) => {
+				let size = access.value.len() as u64;
+				let set_start_time = Instant::now();
+
+				self.client.set(access.key, access.value, access.ttl)?;
+
+				self.stats.store_set_time(set_start_time);
+				self.stats.store_set_size(size);
+			},
+		}
+
+		Ok(())
+	}
+}
+
+impl Display for ClientType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		let s = match self {
+			ClientType::Lookaside => "lookaside",
+			ClientType::ReadThrough => "read-through",
+		};
+
+		write!(f, "{s}")
 	}
 }

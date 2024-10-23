@@ -49,20 +49,20 @@ struct PercentileLatency {
 }
 
 impl Stats {
-	pub fn store_ping_time(&mut self, instant: Instant, duration: Duration) {
-		self.ping_latencies.push((instant, duration));
+	pub fn store_ping_time(&mut self, instant: Instant) {
+		self.ping_latencies.push((instant, instant.elapsed()));
 	}
 
-	pub fn store_get_time(&mut self, instant: Instant, duration: Duration) {
-		self.get_latencies.push((instant, duration));
+	pub fn store_get_time(&mut self, instant: Instant) {
+		self.get_latencies.push((instant, instant.elapsed()));
 	}
 
 	pub fn store_get_size(&mut self, size: u64) {
 		self.get_total_size += size;
 	}
 
-	pub fn store_set_time(&mut self, instant: Instant, duration: Duration) {
-		self.set_latencies.push((instant, duration));
+	pub fn store_set_time(&mut self, instant: Instant) {
+		self.set_latencies.push((instant, instant.elapsed()));
 	}
 
 	pub fn store_set_size(&mut self, size: u64) {
