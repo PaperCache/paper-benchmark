@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) Kia Shakiba
+ *
+ * This source code is licensed under the GNU AGPLv3 license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 mod access;
 mod client;
 mod stats;
@@ -118,7 +125,7 @@ fn main() {
 		let reader = BinaryReader::<Access>::from_path(trace_path)
 			.expect("Invalid trace path.");
 
-		println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::size() as u64));
+		println!("\nProcessing {} accesses", fmt::number(reader.size() / Access::chunk_size() as u64));
 
 		let mut progress = Progress::new(reader.size())
 			.with_tag(Tag::Tps)
@@ -146,7 +153,7 @@ fn main() {
 			sender.send(ClientEvent::Access(access))
 				.expect("Could not send access to client.");
 
-			progress.tick(Access::size());
+			progress.tick(Access::chunk_size());
 		}
 	}
 
@@ -191,7 +198,7 @@ where
 	let mut reader = BinaryReader::<Access>::from_path(path)?;
 	let first_access = reader.read_chunk()?;
 
-	reader.seek(SeekFrom::End(-(Access::size() as i64)))?;
+	reader.seek(SeekFrom::End(-(Access::chunk_size() as i64)))?;
 	let last_access = reader.read_chunk()?;
 
 	if last_access.timestamp < first_access.timestamp {

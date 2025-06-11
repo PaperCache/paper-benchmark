@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) Kia Shakiba
+ *
+ * This source code is licensed under the GNU AGPLv3 license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 use std::{
 	io,
 	ops::AddAssign,
@@ -76,29 +83,59 @@ impl Stats {
 	pub fn print_get_stats(&self) {
 		print_stats("GET", &self.get_latencies);
 
-		if !self.get_latencies.is_empty() {
-			let avg_size = (self.get_total_size as f64 / self.get_latencies.len() as f64) as u64;
-
-			println!(
-				"Avg GET size:\t{} ({} B)",
-				fmt::memory(avg_size, Some(2)),
-				avg_size,
-			);
+		if self.get_latencies.is_empty() {
+			return;
 		}
+
+		let avg_size = (self.get_total_size as f64 / self.get_latencies.len() as f64) as u64;
+
+		println!(
+			"Avg GET size:\t{} ({} B)",
+			fmt::memory(avg_size, Some(2)),
+			fmt::number(avg_size),
+		);
+
+		let total_time = self.get_latencies
+			.iter()
+			.map(|(_, duration)| duration)
+			.sum::<Duration>();
+
+		let bandwidth = self.get_total_size as f64 / total_time.as_secs_f64();
+
+		println!(
+			"Bandwidth:\t{}/s ({} B/s)",
+			fmt::memory(bandwidth, Some(2)),
+			fmt::number(bandwidth.round()),
+		);
 	}
 
 	pub fn print_set_stats(&self) {
 		print_stats("SET", &self.set_latencies);
 
-		if !self.set_latencies.is_empty() {
-			let avg_size = (self.set_total_size as f64 / self.set_latencies.len() as f64) as u64;
-
-			println!(
-				"Avg SET size:\t{} ({} B)",
-				fmt::memory(avg_size, Some(2)),
-				avg_size,
-			);
+		if self.set_latencies.is_empty() {
+			return;
 		}
+
+		let avg_size = (self.set_total_size as f64 / self.set_latencies.len() as f64) as u64;
+
+		println!(
+			"Avg SET size:\t{} ({} B)",
+			fmt::memory(avg_size, Some(2)),
+			fmt::number(avg_size),
+		);
+
+		let total_time = self.set_latencies
+			.iter()
+			.map(|(_, duration)| duration)
+			.sum::<Duration>();
+
+		let bandwidth = self.set_total_size as f64 / total_time.as_secs_f64();
+
+		println!(
+			"Bandwidth:\t{}/s ({} B/s)",
+			fmt::memory(bandwidth, Some(2)),
+			fmt::number(bandwidth.round()),
+		);
 	}
 
 	pub fn save_latency_percentiles<P>(&self, path: P) -> io::Result<()>

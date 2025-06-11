@@ -1,3 +1,10 @@
+/*
+ * Copyright (c) Kia Shakiba
+ *
+ * This source code is licensed under the GNU AGPLv3 license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
 use std::io::{self, Cursor};
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -24,7 +31,9 @@ pub struct Access {
 }
 
 impl SizedChunk for Access {
-	fn size() -> usize { 25 }
+	fn chunk_size() -> usize {
+		25
+	}
 }
 
 impl ReadChunk for Access {
